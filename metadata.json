@@ -1,0 +1,8 @@
+{
+  "name": "Remix Remix Remix Remix VMA Live cont",
+  "description": "Ứng dụng xem truyền hình trực tuyến với nguồn M3U và lịch phát sóng EPG động",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
