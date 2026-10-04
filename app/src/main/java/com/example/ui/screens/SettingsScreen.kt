@@ -5,6 +5,7 @@ import android.app.Activity
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import com.example.data.remote.ota.OtaManager
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -286,6 +287,8 @@ fun SettingsScreen(
     var autoStopMinutesInput by remember { mutableIntStateOf(pvrAutoStopMinutes) }
 
     var showLiquidGlassWarning by remember { mutableStateOf(false) }
+    var showRepoConfigDialog by remember { mutableStateOf(false) }
+    var otaRepoInput by remember { mutableStateOf(OtaManager.getRepository(context)) }
 
     val dateFormat = remember { SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale.getDefault()) }
     val lastSyncFormatted = remember(syncState.lastSyncTime) {
@@ -574,6 +577,13 @@ fun SettingsScreen(
                 )
                 HorizontalDivider(color = dividerColor, modifier = Modifier.padding(start = 48.dp))
                 SettingsRowItem(
+                    icon = Icons.Default.Cloud,
+                    title = "Kho lưu trữ GitHub OTA",
+                    subtitle = "$otaRepoInput • Chạm để đổi kho hoặc xem hướng dẫn",
+                    onClick = { showRepoConfigDialog = true }
+                )
+                HorizontalDivider(color = dividerColor, modifier = Modifier.padding(start = 48.dp))
+                SettingsRowItem(
                     icon = Icons.Default.Info,
                     title = "Thông tin thiết bị & ứng dụng",
                     subtitle = "ExoPlayer v1.4 • MediaCodec Fallback",
@@ -774,6 +784,92 @@ fun SettingsScreen(
                     adminErrorMsg = ""
                 }) {
                     Text("Hủy", color = vmaTheme.textMuted)
+                }
+            }
+        )
+    }
+
+    // 0.2 GitHub Repository OTA Config Dialog
+    if (showRepoConfigDialog) {
+        var tempRepo by remember { mutableStateOf(otaRepoInput) }
+
+        AlertDialog(
+            onDismissRequest = { showRepoConfigDialog = false },
+            containerColor = cardBgColor,
+            titleContentColor = vmaTheme.textPrimary,
+            textContentColor = vmaTheme.textSecondary,
+            shape = RoundedCornerShape(20.dp),
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(imageVector = Icons.Default.Cloud, contentDescription = null, tint = vmaTheme.primary, modifier = Modifier.size(24.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Kho cập nhật GitHub (OTA)", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                }
+            },
+            text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "Nhập tên Repository GitHub của bạn (dạng user/repo):\nVí dụ: lucismng/vma-live",
+                        fontSize = 13.sp,
+                        color = vmaTheme.textPrimary
+                    )
+
+                    OutlinedTextField(
+                        value = tempRepo,
+                        onValueChange = { tempRepo = it },
+                        label = { Text("GitHub Repo") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = vmaTheme.primary,
+                            unfocusedBorderColor = cardBorderColor
+                        )
+                    )
+
+                    Text(
+                        text = "💡 Lưu ý để không bị lỗi 404:\n• Kho lưu trữ phải ở chế độ Public (Công khai).\n• Đã Publish bản Release (Draft hoặc Pre-release không tính).\n• Đã tải đính kèm file APK (.apk) vào Release đó.",
+                        fontSize = 12.sp,
+                        color = vmaTheme.textMuted
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val clean = tempRepo.trim().removePrefix("https://github.com/").trim('/')
+                        if (clean.isNotBlank() && clean.contains('/')) {
+                            OtaManager.setRepository(context, clean)
+                            otaRepoInput = clean
+                            Toast.makeText(context, "Đã lưu kho: $clean", Toast.LENGTH_SHORT).show()
+                            showRepoConfigDialog = false
+                        } else {
+                            Toast.makeText(context, "Định dạng không hợp lệ! Cần dạng username/repository", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = vmaTheme.primary),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text("Lưu", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = {
+                        val defaultRepo = OtaManager.DEFAULT_GITHUB_REPO
+                        OtaManager.setRepository(context, defaultRepo)
+                        otaRepoInput = defaultRepo
+                        tempRepo = defaultRepo
+                        Toast.makeText(context, "Đã đặt về mặc định ($defaultRepo)", Toast.LENGTH_SHORT).show()
+                    }) {
+                        Text("Mặc định", color = vmaTheme.primary)
+                    }
+                    TextButton(onClick = { showRepoConfigDialog = false }) {
+                        Text("Đóng", color = vmaTheme.textMuted)
+                    }
                 }
             }
         )

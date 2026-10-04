@@ -52,23 +52,84 @@ class OtaManager(
                 return@withContext Result.failure(IllegalArgumentException("Định dạng repository GitHub không hợp lệ (cần dạng: user/repo)"))
             }
 
-            val url = "https://api.github.com/repos/$repo/releases/latest"
-            val request = Request.Builder()
-                .url(url)
-                .header("Accept", "application/vnd.github.v3+json")
-                .header("User-Agent", "VMALiveTV/${BuildConfig.VERSION_NAME}")
-                .build()
+            // 1. Thử lấy bản phát hành chính thức mới nhất (/releases/latest)
+            var response = client.newCall(
+                Request.Builder()
+                    .url("https://api.github.com/repos/$repo/releases/latest")
+                    .header("Accept", "application/vnd.github.v3+json")
+                    .header("User-Agent", "VMALiveTV/${BuildConfig.VERSION_NAME}")
+                    .build()
+            ).execute()
 
-            val response = client.newCall(request).execute()
-            if (!response.isSuccessful) {
+            var responseBody: String? = null
+            var isFromListFallback = false
+
+            if (response.isSuccessful) {
+                responseBody = response.body?.string()
+            } else if (response.code == 404) {
+                response.close()
+                // Nếu /releases/latest trả về 404, có thể repo chỉ có Pre-release hoặc Draft.
+                // Thử gọi /releases để lấy danh sách toàn bộ releases.
+                val fallbackResponse = client.newCall(
+                    Request.Builder()
+                        .url("https://api.github.com/repos/$repo/releases")
+                        .header("Accept", "application/vnd.github.v3+json")
+                        .header("User-Agent", "VMALiveTV/${BuildConfig.VERSION_NAME}")
+                        .build()
+                ).execute()
+
+                if (fallbackResponse.isSuccessful) {
+                    val listBody = fallbackResponse.body?.string() ?: ""
+                    fallbackResponse.close()
+                    val releasesArray = org.json.JSONArray(listBody)
+                    if (releasesArray.length() > 0) {
+                        // Lấy release đầu tiên trong danh sách (kể cả pre-release)
+                        responseBody = releasesArray.getJSONObject(0).toString()
+                        isFromListFallback = true
+                    } else {
+                        return@withContext Result.failure(
+                            Exception("Repo '$repo' chưa có bất kỳ bản Release nào trên GitHub. Vui lòng vào GitHub > Releases > 'Draft a new release' và ấn 'Publish release'.")
+                        )
+                    }
+                } else {
+                    val fbCode = fallbackResponse.code
+                    fallbackResponse.close()
+                    // Kiểm tra xem repo có tồn tại công khai không
+                    val repoCheck = client.newCall(
+                        Request.Builder()
+                            .url("https://api.github.com/repos/$repo")
+                            .header("Accept", "application/vnd.github.v3+json")
+                            .header("User-Agent", "VMALiveTV/${BuildConfig.VERSION_NAME}")
+                            .build()
+                    ).execute()
+                    val repoExists = repoCheck.isSuccessful
+                    repoCheck.close()
+
+                    return@withContext if (!repoExists) {
+                        Result.failure(
+                            Exception("Không tìm thấy kho '$repo' (HTTP 404). Nguyên nhân: Kho chưa được tạo, sai tên tài khoản/tên kho, hoặc đang ở chế độ Private (cần đổi sang Public).")
+                        )
+                    } else {
+                        Result.failure(
+                            Exception("Kho '$repo' chưa có bản Release nào được xuất bản (Publish). Hãy tạo Release mới trên GitHub và đính kèm file APK.")
+                        )
+                    }
+                }
+            } else {
                 val code = response.code
                 response.close()
-                return@withContext Result.failure(Exception("GitHub API HTTP $code (chưa có release hoặc repo chưa public)"))
+                return@withContext Result.failure(
+                    Exception(
+                        when (code) {
+                            403 -> "Bị giới hạn lượt gọi GitHub API (HTTP 403 Rate Limit). Vui lòng thử lại sau vài phút."
+                            else -> "GitHub API HTTP $code (chưa có release hoặc repo chưa public)"
+                        }
+                    )
+                )
             }
 
-            val responseBody = response.body?.string() ?: ""
-            if (responseBody.isBlank()) {
-                return@withContext Result.failure(Exception("Phản hồi rỗng từ máy chủ"))
+            if (responseBody.isNullOrBlank()) {
+                return@withContext Result.failure(Exception("Phản hồi rỗng từ máy chủ GitHub"))
             }
 
             val json = JSONObject(responseBody)

@@ -29,6 +29,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -246,6 +249,8 @@ fun VmaApp(
     val googleDriveQuota by viewModel.googleDriveQuota.collectAsStateWithLifecycle()
     val pvrKeepLocalCopy by viewModel.pvrKeepLocalCopy.collectAsStateWithLifecycle()
     val pvrAutoStopMinutes by viewModel.pvrAutoStopMinutes.collectAsStateWithLifecycle()
+
+    var otaStatusMessage by remember { mutableStateOf<String?>(null) }
 
     // Auto-select first channel when channels load
     LaunchedEffect(channels) {
@@ -570,9 +575,9 @@ fun VmaApp(
                                     viewModel.checkOtaUpdate(manual = manual) { info, err ->
                                         if (manual) {
                                             if (info != null && !info.hasUpdate) {
-                                                android.widget.Toast.makeText(context, "Bạn đang dùng bản mới nhất (${info.currentVersion})", android.widget.Toast.LENGTH_SHORT).show()
+                                                otaStatusMessage = "Bạn đang dùng phiên bản mới nhất (${info.currentVersion}). Chưa có bản cập nhật nào mới hơn trên GitHub."
                                             } else if (err != null) {
-                                                android.widget.Toast.makeText(context, err, android.widget.Toast.LENGTH_SHORT).show()
+                                                otaStatusMessage = err
                                             }
                                         }
                                     }
@@ -607,6 +612,32 @@ fun VmaApp(
         OtaUpdateDialog(
             updateInfo = updateInfo,
             onDismiss = { viewModel.dismissOtaDialog() }
+        )
+    }
+
+    // OTA Manual Check Result Dialog (e.g. up to date or detailed error info)
+    otaStatusMessage?.let { msg ->
+        AlertDialog(
+            onDismissRequest = { otaStatusMessage = null },
+            title = {
+                Text(
+                    text = "Thông tin cập nhật OTA",
+                    style = MaterialTheme.typography.titleMedium
+                )
+            },
+            text = {
+                Text(
+                    text = msg,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = { otaStatusMessage = null }
+                ) {
+                    Text("Đã hiểu")
+                }
+            }
         )
     }
 }
